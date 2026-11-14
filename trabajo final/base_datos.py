@@ -1,0 +1,96 @@
+import os
+import sqlite3
+
+class Base_Datos:
+    def __init__(self, Nombre_Archivo = "Ecotech.db"):
+        Carpeta = os.path.dirname(os.path.abspath(__file__))
+        self.__ruta = os.path.join(Carpeta, Nombre_Archivo)
+
+    def get_ruta(self):
+        return self.__ruta
+
+    def _conectar(self):
+        conexion = sqlite3.connect(self.__ruta)
+        conexion.execute("PRAGMA foreign_keys = ON")
+        return conexion
+
+    def probar_conexion(self):
+        conexion = None
+        try:
+            conexion = self._conectar()
+            print("Conexion Exitosa a SQLite!!")
+            return True
+        except sqlite3.Error as error:
+            print("Error al conectar a la base de datos:", error)
+            return False
+        finally:
+            if conexion is not None:
+                conexion.close()
+
+    def Crear_Tablas(self):
+        sql = """
+        CREATE TABLE IF NOT EXISTS Usuarios (
+            ID_Usuario INTEGER PRIMARY KEY AUTOINCREMENT,
+            Tipo TEXT NOT NULL,
+            Nombre TEXT NOT NULL,
+            Email TEXT NOT NULL UNIQUE,
+            Ciudad_Frecuente TEXT,
+            Nivel_Acceso INTEGER,
+            Clave_Hash TEXT,
+            Sal TEXT
+        )
+        """
+
+        self.ejecutar(sql)
+
+        # tabla donde se guardan las consultas a las APIs externas
+        sql_consultas = """
+        CREATE TABLE IF NOT EXISTS Consultas (
+            ID_Consulta INTEGER PRIMARY KEY AUTOINCREMENT,
+            ID_Usuario INTEGER NOT NULL,
+            Tipo TEXT NOT NULL,
+            Detalle TEXT NOT NULL,
+            Resultado TEXT NOT NULL,
+            Fecha TEXT NOT NULL,
+            FOREIGN KEY (ID_Usuario) REFERENCES Usuarios(ID_Usuario)
+        )
+        """
+        self.ejecutar(sql_consultas)
+
+        # si la tabla ya existia de antes, le agrego las columnas nuevas
+        columnas = []
+        for fila in self.consultar("PRAGMA table_info(Usuarios)"):
+            columnas.append(fila[1])
+        if "Clave_Hash" not in columnas:
+            self.ejecutar("ALTER TABLE Usuarios ADD COLUMN Clave_Hash TEXT")
+        if "Sal" not in columnas:
+            self.ejecutar("ALTER TABLE Usuarios ADD COLUMN Sal TEXT")
+
+    def ejecutar(self, sql, parametros=()):
+        conexion = None
+        try:
+            conexion = self._conectar()
+            cursor = conexion.execute(sql, parametros)
+            conexion.commit()
+            return (cursor.lastrowid, cursor.rowcount)
+        
+        except sqlite3.Error as error:
+            print("Error en base de datos:", error)
+            return None
+
+        finally:
+            if conexion is not None:
+                conexion.close()
+
+    def consultar(self, sql, parametros=()):
+        conexion = None
+        try:
+            conexion = self._conectar()
+            cursor = conexion.execute(sql, parametros)
+            return cursor.fetchall()
+        except sqlite3.Error as error:
+            print("Error en consulta", error)
+            return []
+        finally:
+            if conexion is not None:
+                conexion.close()
